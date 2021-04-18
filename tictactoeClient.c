@@ -2,7 +2,7 @@
 NAME: Ryan Ellis
 CLASS: CSCI 3800
 STUDENT NUMBER: 109576156
-ASSIGNMENT: LAB7
+ASSIGNMENT: Final Project
 */
 
 /* include files go here */
@@ -19,17 +19,23 @@ ASSIGNMENT: LAB7
 #include <sys/time.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <memory.h>
 
-/* #define section, for now we will define the number of rows and columns */
+/* Define Terms for Protocol*/
 #define ROWS 3
 #define COLUMNS 3
 #define SOCKETERROR -1
 #define TIMETOWAIT 10
-#define VERSION 5
+#define VERSION 6
 #define NEWGAME 0
 #define CONTINUEGAME 1
 #define GAMEOVER 2
+#define RESUME 3
 #define PACKETSIZE 5
+
+/* Define terms for multicast */
+#define MC_PORT 1818
+#define MC_GROUP "239.0.0.1"
 
 struct gamePacket
 {
@@ -38,6 +44,18 @@ struct gamePacket
   char move;
   char game;
   char sequence;
+};
+
+struct lostConnection
+{
+  char version;
+  char command;
+};
+
+struct multicastPacket
+{
+  char version;
+  short portNumber;
 };
 
 /***********************************************************/
@@ -54,6 +72,8 @@ int isSquareOccupied(int choice, char board[ROWS][COLUMNS]);
 int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetOut);
 int recvMoveFromServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetIn, struct gamePacket *packetOut);
 int createSocket(char *ipAddress, int portno, struct sockaddr_in *toAddress, int *sock);
+int createMulticastSocket(struct sockaddr_in *toAddress, int *sock);
+int readIPAddrFromFile();
 
 int main(int argc, char *argv[])
 {
@@ -74,8 +94,9 @@ int main(int argc, char *argv[])
   /***********************************************************/
   /*                 Create the socket                       */
   /***********************************************************/
-  checkErrors(createSocket(argv[1], port, &toAddress, &clientSocket), "Cannot establish Socket");
-
+  //checkErrors(createSocket(argv[1], port, &toAddress, &clientSocket), "Cannot establish Socket");
+  createMulticastSocket(&toAddress, &clientSocket);
+  //readIPAddrFromFile();
   /***********************************************************/
   /*               Start the game                            */
   /***********************************************************/
@@ -457,6 +478,124 @@ int createSocket(char *ipAddress, int portNumber, struct sockaddr_in *toAddress,
   //   perror("ERROR");
   //   exit(5);
   // }
+
+  return 0;
+}
+
+int createMulticastSocket(struct sockaddr_in *toAddress, int *sock)
+{
+  int multicastSocket, tcpSocket, portNum, rc;
+  struct sockaddr_in multiAddr, from_addr, test_addr;
+  struct multicastPacket multiPacketIn;
+  struct lostConnection resumePacketOut, resumePacketIn;
+  socklen_t addrLen;
+  struct ip_mreq mreq;
+  char ipAddr[16];
+  struct gamePacket gamePacket;
+
+  /*Sets up the multicast socket*/
+  multicastSocket = socket(AF_INET, SOCK_DGRAM, 0);
+  if (multicastSocket < 0)
+  {
+    perror("multicast socket");
+    exit(1);
+  }
+
+  // This sets up the TO address. Note that I am setting up the TO address
+  // to be a multicast address....
+  bzero((char *)&multiAddr, sizeof(multiAddr));
+  multiAddr.sin_family = AF_INET;
+  multiAddr.sin_port = htons(MC_PORT);
+  multiAddr.sin_addr.s_addr = inet_addr(MC_GROUP);
+  addrLen = sizeof(struct sockaddr_in);
+
+  resumePacketOut.version = VERSION;
+  resumePacketOut.command = RESUME;
+
+  /*******************************************************************/
+  /*                      Send / Receive                             */
+  /*                     multicast packet                            */
+  /*                                                                 */
+  /*******************************************************************/
+
+  rc = sendto(multicastSocket, &resumePacketOut, sizeof(resumePacketOut), 0, (struct sockaddr *)&multiAddr, addrLen);
+  if (rc < 0)
+  {
+    perror("SEND TO");
+    exit(1);
+  }
+
+  rc = recvfrom(multicastSocket, &multiPacketIn, sizeof(multiPacketIn), 0, (struct sockaddr *)&from_addr, &addrLen);
+  if (rc < 0)
+  {
+    perror("RECV From");
+    exit(1);
+  }
+
+  //Do I create a new socket to connect to?
+  //THen do I need a new struct sockaddr_in to input my info in
+  //Then connect to socket.
+  //Am I pulling the ip address out correctly?
+
+  //The recvfrom should have the ipaddress attached to it therefore I just have to change the port number then connect to it.
+  //no need to pull the ip address out of the struct
+
+  //Store port Number sent from server in variable to use for TCP connection
+  //portNum = ntohs(multiPacketIn.portNumber);
+  from_addr.sin_port = htons(10005);
+  tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+  //Connect to the server via TCP
+  rc = connect(tcpSocket, (struct sockaddr *)&from_addr, addrLen);
+  if (rc < 0)
+  {
+    perror("Connect");
+    exit(1);
+  }
+  /*****************************/
+  /*        Test Send          */
+  /*****************************/
+  gamePacket.version = VERSION;
+  gamePacket.command = CONTINUEGAME;
+  gamePacket.move = 3;
+  gamePacket.game = 4;
+  gamePacket.sequence = 7;
+
+  rc = send(tcpSocket, &gamePacket, sizeof(gamePacket), 0);
+  if (rc < 0)
+  {
+    perror("Write");
+    exit(1);
+  }
+
+  return 0;
+}
+
+int readIPAddrFromFile()
+{
+  FILE *fileptr;
+  char filename[100];
+  char ipaddress[15];
+  char portNumber[10];
+  int port;
+
+  memset(ipaddress, 0, 15);
+  memset(portNumber, 0, 10);
+
+  strcpy(filename, "backup_connections.txt");
+  fileptr = fopen(filename, "r");
+
+  if (fileptr == NULL)
+  {
+    perror("FILE OPEN");
+    exit(1);
+  }
+
+  fscanf(fileptr, "%s"
+                  "%d",
+         ipaddress, &port);
+
+  printf("RECIEVED From FILE:\nIP Addr: %s\nPort: %d\n", ipaddress, port);
 
   return 0;
 }
