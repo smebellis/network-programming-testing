@@ -26,7 +26,7 @@ ASSIGNMENT: Final Project
 #define COLUMNS 3
 #define SOCKETERROR -1
 #define TIMETOWAIT 10
-#define VERSION 6
+#define VERSION 5
 #define NEWGAME 0
 #define CONTINUEGAME 1
 #define GAMEOVER 2
@@ -44,6 +44,16 @@ struct gamePacket
   char move;
   char game;
   char sequence;
+};
+
+struct multiGamePacket
+{
+  char version;
+  char command;
+  char move;
+  char game;
+  char sequence;
+  char board[ROWS][COLUMNS];
 };
 
 struct lostConnection
@@ -69,11 +79,11 @@ int initSharedState(char board[ROWS][COLUMNS]);
 int checkErrors(int exp, const char *msg);
 void wargames();
 int isSquareOccupied(int choice, char board[ROWS][COLUMNS]);
-int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetOut);
+int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetOut, char board[ROWS][COLUMNS]);
 int recvMoveFromServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetIn, struct gamePacket *packetOut);
 int createSocket(char *ipAddress, int portno, struct sockaddr_in *toAddress, int *sock);
-int createMulticastSocket(struct sockaddr_in *toAddress, int *sock);
-int readIPAddrFromFile();
+int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMNS]);
+int readIPAddrFromFile(struct sockaddr_in *toAddress);
 
 int main(int argc, char *argv[])
 {
@@ -94,9 +104,11 @@ int main(int argc, char *argv[])
   /***********************************************************/
   /*                 Create the socket                       */
   /***********************************************************/
+
   //checkErrors(createSocket(argv[1], port, &toAddress, &clientSocket), "Cannot establish Socket");
-  createMulticastSocket(&toAddress, &clientSocket);
-  //readIPAddrFromFile();
+
+  createMulticastSocket(&toAddress, board);
+
   /***********************************************************/
   /*               Start the game                            */
   /***********************************************************/
@@ -188,7 +200,7 @@ int tictactoe(char board[ROWS][COLUMNS], int Socket, int playerNumber, struct so
       packetOut.game = currentGame;
       packetOut.sequence = sequenceNum;
 
-      sendMoveToServer(Socket, toAddress, &packetOut);
+      sendMoveToServer(Socket, toAddress, &packetOut, board);
     }
     else
     {
@@ -242,7 +254,7 @@ int tictactoe(char board[ROWS][COLUMNS], int Socket, int playerNumber, struct so
       packetOut.command = GAMEOVER;
       packetOut.sequence = packetOut.sequence + 1;
       printf("[CLIENT]\nSending GAMEOVER to Server\n\n");
-      sendMoveToServer(Socket, toAddress, &packetOut);
+      sendMoveToServer(Socket, toAddress, &packetOut, board);
     }
   }
   else
@@ -373,7 +385,7 @@ void wargames()
   sleep(3);
 }
 
-int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetOut)
+int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetOut, char board[ROWS][COLUMNS])
 {
   /******************************************************************/
   /*               Sends the packet to the server                   */
@@ -385,7 +397,8 @@ int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacke
   if (rc <= 0)
   {
     perror("[SEND]\n Error sending packet");
-    exit(2);
+    createMulticastSocket(toAddress, board);
+    //exit(2);
   }
 
   printf("[CLIENT]\nVersion: %x\nCommand: %x\nMove: %x\nGame Number: %x\nSequence Number: %x\n\n", packetOut->version, packetOut->command, packetOut->move, packetOut->game, packetOut->sequence);
@@ -449,6 +462,7 @@ int createSocket(char *ipAddress, int portNumber, struct sockaddr_in *toAddress,
   /******************************************************************/
 
   int rc; //Used for error handling
+
   //struct sockaddr_in fromAddress;
 
   socklen_t length = sizeof(struct sockaddr_in);
@@ -473,6 +487,7 @@ int createSocket(char *ipAddress, int portNumber, struct sockaddr_in *toAddress,
     perror("[CONNECTION]\n Connection Error");
     exit(1);
   }
+
   // if (bind(*sock, (struct sockaddr *)&fromAddress, sizeof(fromAddress)) < 0)
   // {
   //   perror("ERROR");
@@ -482,18 +497,23 @@ int createSocket(char *ipAddress, int portNumber, struct sockaddr_in *toAddress,
   return 0;
 }
 
-int createMulticastSocket(struct sockaddr_in *toAddress, int *sock)
+int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMNS])
 {
   int multicastSocket, tcpSocket, portNum, rc;
-  struct sockaddr_in multiAddr, from_addr, test_addr;
+  struct sockaddr_in multiAddr;
   struct multicastPacket multiPacketIn;
-  struct lostConnection resumePacketOut, resumePacketIn;
+  struct lostConnection resumePacketOut;
   socklen_t addrLen;
   struct ip_mreq mreq;
-  char ipAddr[16];
+  char ipAddr[INET_ADDRSTRLEN];
   struct gamePacket gamePacket;
+  struct multiGamePacket fullPacket;
 
-  /*Sets up the multicast socket*/
+  /*****************************/
+  /*      Create Multicast     */
+  /*          socket           */
+  /*****************************/
+
   multicastSocket = socket(AF_INET, SOCK_DGRAM, 0);
   if (multicastSocket < 0)
   {
@@ -501,22 +521,29 @@ int createMulticastSocket(struct sockaddr_in *toAddress, int *sock)
     exit(1);
   }
 
-  // This sets up the TO address. Note that I am setting up the TO address
-  // to be a multicast address....
+  /*******************************/
+  /*            Create           */
+  /*       Multicast Address     */
+  /*******************************/
+
   bzero((char *)&multiAddr, sizeof(multiAddr));
   multiAddr.sin_family = AF_INET;
   multiAddr.sin_port = htons(MC_PORT);
   multiAddr.sin_addr.s_addr = inet_addr(MC_GROUP);
   addrLen = sizeof(struct sockaddr_in);
 
+  /*********************/
+  /*     Packet to     */
+  /*        send       */
+  /*********************/
+
   resumePacketOut.version = VERSION;
   resumePacketOut.command = RESUME;
 
-  /*******************************************************************/
-  /*                      Send / Receive                             */
-  /*                     multicast packet                            */
-  /*                                                                 */
-  /*******************************************************************/
+  /**********************************/
+  /*        Send / Receive          */
+  /*       multicast packet         */
+  /**********************************/
 
   rc = sendto(multicastSocket, &resumePacketOut, sizeof(resumePacketOut), 0, (struct sockaddr *)&multiAddr, addrLen);
   if (rc < 0)
@@ -525,43 +552,53 @@ int createMulticastSocket(struct sockaddr_in *toAddress, int *sock)
     exit(1);
   }
 
-  rc = recvfrom(multicastSocket, &multiPacketIn, sizeof(multiPacketIn), 0, (struct sockaddr *)&from_addr, &addrLen);
+  rc = recvfrom(multicastSocket, &multiPacketIn, sizeof(multiPacketIn), 0, (struct sockaddr *)toAddress, &addrLen);
   if (rc < 0)
   {
     perror("RECV From");
     exit(1);
   }
 
-  //Do I create a new socket to connect to?
-  //THen do I need a new struct sockaddr_in to input my info in
-  //Then connect to socket.
-  //Am I pulling the ip address out correctly?
+  portNum = ntohs(multiPacketIn.portNumber);
+  toAddress->sin_port = htons(portNum);
+  inet_ntop(AF_INET, &(toAddress->sin_addr), ipAddr, INET_ADDRSTRLEN);
+  printf("The Server address is: %s\n", ipAddr);
+  printf("The Server Port is: %d\n", portNum);
 
-  //The recvfrom should have the ipaddress attached to it therefore I just have to change the port number then connect to it.
-  //no need to pull the ip address out of the struct
+  /**********************************/
+  /*          Create TCP            */
+  /*            Socket              */
+  /**********************************/
 
-  //Store port Number sent from server in variable to use for TCP connection
-  //portNum = ntohs(multiPacketIn.portNumber);
-  from_addr.sin_port = htons(10005);
   tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
 
   //Connect to the server via TCP
-  rc = connect(tcpSocket, (struct sockaddr *)&from_addr, addrLen);
+  rc = connect(tcpSocket, (struct sockaddr *)toAddress, addrLen);
   if (rc < 0)
   {
     perror("Connect");
     exit(1);
   }
+
   /*****************************/
   /*        Test Send          */
   /*****************************/
-  gamePacket.version = VERSION;
-  gamePacket.command = CONTINUEGAME;
-  gamePacket.move = 3;
-  gamePacket.game = 4;
-  gamePacket.sequence = 7;
+  fullPacket.version = VERSION;
+  fullPacket.command = CONTINUEGAME;
+  fullPacket.move = 3;
+  fullPacket.game = 4;
+  fullPacket.sequence = 7;
+  fullPacket.board[0][0] = 'X';
+  fullPacket.board[0][1] = board[0][1];
+  fullPacket.board[0][2] = board[0][2];
+  fullPacket.board[1][0] = board[1][0];
+  fullPacket.board[1][1] = board[1][1];
+  fullPacket.board[1][2] = board[1][2];
+  fullPacket.board[2][0] = board[2][0];
+  fullPacket.board[2][1] = board[2][1];
+  fullPacket.board[2][2] = board[2][2];
 
-  rc = send(tcpSocket, &gamePacket, sizeof(gamePacket), 0);
+  rc = write(tcpSocket, &fullPacket, sizeof(fullPacket));
   if (rc < 0)
   {
     perror("Write");
@@ -571,16 +608,14 @@ int createMulticastSocket(struct sockaddr_in *toAddress, int *sock)
   return 0;
 }
 
-int readIPAddrFromFile()
+int readIPAddrFromFile(struct sockaddr_in *toAddress)
 {
   FILE *fileptr;
   char filename[100];
   char ipaddress[15];
-  char portNumber[10];
   int port;
 
   memset(ipaddress, 0, 15);
-  memset(portNumber, 0, 10);
 
   strcpy(filename, "backup_connections.txt");
   fileptr = fopen(filename, "r");
@@ -591,6 +626,10 @@ int readIPAddrFromFile()
     exit(1);
   }
 
+  //Some sort of loop that runs through each line of the file
+  //If it reads info from the line then check if we can get a connection
+  //If the rc is == 0 then send the resume gamepacket with
+  //The current game board.
   fscanf(fileptr, "%s"
                   "%d",
          ipaddress, &port);
