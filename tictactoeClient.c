@@ -26,7 +26,7 @@ ASSIGNMENT: Final Project
 #define COLUMNS 3
 #define SOCKETERROR -1
 #define TIMETOWAIT 10
-#define VERSION 5
+#define VERSION 6
 #define NEWGAME 0
 #define CONTINUEGAME 1
 #define GAMEOVER 2
@@ -525,6 +525,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
 
   struct timeval tv;
   int count = 0;
+  connection = 2; //Set the connection number to avoid the if statement on line 640
 
   tv.tv_sec = TIMETOWAIT;
   tv.tv_usec = 0;
@@ -670,11 +671,6 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
   fullPacket.board[2][1] = board[2][1];
   fullPacket.board[2][2] = board[2][2];
 
-  printf("[TCP CLIENT]\nVersion: %x\nCommand: %x\nMove: %x\nGame: %x\nSequence: %x\nBoard: %c %c %c %c %c %c %c %c %c\n\n", fullPacket.version, fullPacket.command, fullPacket.move, fullPacket.game, fullPacket.sequence,
-         fullPacket.board[0][0], fullPacket.board[0][1], fullPacket.board[0][2],
-         fullPacket.board[1][0], fullPacket.board[1][1], fullPacket.board[1][2],
-         fullPacket.board[2][0], fullPacket.board[2][1], fullPacket.board[2][2]);
-
   /***********************/
   /*    Send new packet  */
   /***********************/
@@ -685,6 +681,11 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
     perror("Write");
     exit(1);
   }
+
+  printf("[TCP CLIENT]\nVersion: %x\nCommand: %x\nMove: %x\nGame: %x\nSequence: %x\nBoard: %c %c %c %c %c %c %c %c %c\n\n", fullPacket.version, fullPacket.command, fullPacket.move, fullPacket.game, fullPacket.sequence,
+         fullPacket.board[0][0], fullPacket.board[0][1], fullPacket.board[0][2],
+         fullPacket.board[1][0], fullPacket.board[1][1], fullPacket.board[1][2],
+         fullPacket.board[2][0], fullPacket.board[2][1], fullPacket.board[2][2]);
 
   return 0;
 }
