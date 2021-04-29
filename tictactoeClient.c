@@ -398,7 +398,7 @@ int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacke
   if (rc <= 0)
   {
     perror("[SEND]\n Error sending packet");
-    createMulticastSocket(toAddress, board, packetOut);
+    createMulticastSocket(toAddress, board, packetOut, Socket);
     //exit(2);
   }
 
