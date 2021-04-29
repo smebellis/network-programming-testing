@@ -611,7 +611,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
       if (count == 3)
       {
         printf("[FAILSAFE]\nReconnect Attempts EXCEEDED...\n\n");
-        connection = readIPAddrFromFile(toAddress, &tcpSocket);
+        connection = readIPAddrFromFile(toAddress, sock);
         if (connection == -1)
         {
           printf("[CONNECTION]\n\n**********\nNO AVAILABLE SERVERS\n**********\n");
@@ -629,7 +629,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
       toAddress->sin_port = htons(portNum);
       inet_ntop(AF_INET, &(toAddress->sin_addr), ipAddr, INET_ADDRSTRLEN);
 
-      printf("[MULTICAST SERVER]\nReceived a Reply from IP: %s\nPort Number: %d\n\n", ipAddr, portNum);
+      printf("[MULTICAST SERVER]\nReceived a Reply from IP: %s\nPort Number: %d\n\n", ipAddr, toAddress->sin_port);
 
       //exit(1);
     }
