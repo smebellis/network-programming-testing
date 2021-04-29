@@ -79,8 +79,8 @@ int initSharedState(char board[ROWS][COLUMNS]);
 int checkErrors(int exp, const char *msg);
 void wargames();
 int isSquareOccupied(int choice, char board[ROWS][COLUMNS]);
-int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetOut, char board[ROWS][COLUMNS]);
-int recvMoveFromServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetIn, struct gamePacket *packetOut, char board[ROWS][COLUMNS]);
+int sendMoveToServer(int *Socket, struct sockaddr_in *toAddress, struct gamePacket *packetOut, char board[ROWS][COLUMNS]);
+int recvMoveFromServer(int *Socket, struct sockaddr_in *toAddress, struct gamePacket *packetIn, struct gamePacket *packetOut, char board[ROWS][COLUMNS]);
 int createSocket(char *ipAddress, int portno, struct sockaddr_in *toAddress, int *sock);
 int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMNS], struct gamePacket *packetOut, int *sock);
 int readIPAddrFromFile(struct sockaddr_in *toAddress, int *sock);
@@ -198,12 +198,12 @@ int tictactoe(char board[ROWS][COLUMNS], int Socket, int playerNumber, struct so
       packetOut.game = currentGame;
       packetOut.sequence = sequenceNum;
 
-      sendMoveToServer(Socket, toAddress, &packetOut, board);
+      sendMoveToServer(&Socket, toAddress, &packetOut, board);
     }
     else
     {
 
-      choice = recvMoveFromServer(Socket, toAddress, &packetIn, &packetOut, board);
+      choice = recvMoveFromServer(&Socket, toAddress, &packetIn, &packetOut, board);
       currentGame = packetIn.game;
       sequenceNum = packetIn.sequence; //sets sequence number to the squence from the servers packet
       sequenceNum++;                   //Increments the sequence number for the packet to be sent
@@ -245,14 +245,14 @@ int tictactoe(char board[ROWS][COLUMNS], int Socket, int playerNumber, struct so
     {
       packetOut.command = GAMEOVER;
       printf("[CLIENT]\nWaiting for GAMEOVER from SERVER\n\n");
-      recvMoveFromServer(Socket, toAddress, &packetIn, &packetOut, board);
+      recvMoveFromServer(&Socket, toAddress, &packetIn, &packetOut, board);
     }
     else
     {
       packetOut.command = GAMEOVER;
       packetOut.sequence = packetOut.sequence + 1;
       printf("[CLIENT]\nSending GAMEOVER to Server\n\n");
-      sendMoveToServer(Socket, toAddress, &packetOut, board);
+      sendMoveToServer(&Socket, toAddress, &packetOut, board);
     }
   }
   else
@@ -386,7 +386,7 @@ void wargames()
   sleep(3);
 }
 
-int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetOut, char board[ROWS][COLUMNS])
+int sendMoveToServer(int *Socket, struct sockaddr_in *toAddress, struct gamePacket *packetOut, char board[ROWS][COLUMNS])
 {
   /******************************************************************/
   /*               Sends the packet to the server                   */
@@ -394,11 +394,11 @@ int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacke
   int rc;
   size_t packetLength = sizeof(struct gamePacket);
 
-  rc = write(Socket, packetOut, packetLength);
+  rc = write(*Socket, packetOut, packetLength);
   if (rc <= 0)
   {
     perror("[SEND]\n Error sending packet");
-    createMulticastSocket(toAddress, board, packetOut, &Socket);
+    createMulticastSocket(toAddress, board, packetOut, Socket);
     //exit(2);
   }
 
@@ -407,7 +407,7 @@ int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacke
   return 0;
 }
 
-int recvMoveFromServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetIn, struct gamePacket *packetOut, char board[ROWS][COLUMNS])
+int recvMoveFromServer(int *Socket, struct sockaddr_in *toAddress, struct gamePacket *packetIn, struct gamePacket *packetOut, char board[ROWS][COLUMNS])
 {
   /******************************************************************/
   /*               Receives the packet to the server                */
@@ -418,13 +418,13 @@ int recvMoveFromServer(int Socket, struct sockaddr_in *toAddress, struct gamePac
 
   do
   {
-    rc = read(Socket, packetIn, packetLength);
+    rc = read(*Socket, packetIn, packetLength);
     if (rc <= 0)
     {
       //perror("[RECV]\n Error receiving packet");
       printf("[CONNECTION]\nLost Connection with Server\n\n");
-      close(Socket);
-      createMulticastSocket(toAddress, board, packetOut, &Socket);
+      //close(Socket);
+      createMulticastSocket(toAddress, board, packetOut, Socket);
       //exit(1);
     }
   } while (rc <= 0);
@@ -443,7 +443,7 @@ int recvMoveFromServer(int Socket, struct sockaddr_in *toAddress, struct gamePac
   {
     printf("[SERVER]\nGAME OVER...Exiting Game\n");
     packetOut->command = GAMEOVER;
-    write(Socket, packetOut, packetLength);
+    write(*Socket, packetOut, packetLength);
     exit(2);
   }
   else if (packetIn->command != CONTINUEGAME) //Checks if the command is a move command, if not terminate connection
@@ -629,11 +629,11 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
     {
       memcpy(&portNum, buffer + 1, 2);
       //portNum = ntohs(multiPacketIn.portNumber); //From multicast packet recv
-      toAddress->sin_port = htons(portNum);
+      toAddress->sin_port = portNum;
       inet_ntop(AF_INET, &(toAddress->sin_addr), ipAddr, INET_ADDRSTRLEN);
 
       printf("[MULTICAST SERVER]\nReceived a Reply from IP: %s\nPort Number: %d\n\n", ipAddr, toAddress->sin_port);
-
+      printf("SIN_ADDR: %s", ipAddr);
       //exit(1);
     }
   } while (cnt <= 0);
