@@ -26,7 +26,7 @@ ASSIGNMENT: Final Project
 #define COLUMNS 3
 #define SOCKETERROR -1
 #define TIMETOWAIT 10
-#define VERSION 6
+#define VERSION 5
 #define NEWGAME 0
 #define CONTINUEGAME 1
 #define GAMEOVER 2
@@ -82,7 +82,7 @@ int isSquareOccupied(int choice, char board[ROWS][COLUMNS]);
 int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetOut, char board[ROWS][COLUMNS]);
 int recvMoveFromServer(int Socket, struct sockaddr_in *toAddress, struct gamePacket *packetIn, struct gamePacket *packetOut, char board[ROWS][COLUMNS]);
 int createSocket(char *ipAddress, int portno, struct sockaddr_in *toAddress, int *sock);
-int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMNS], struct gamePacket *packetOut);
+int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMNS], struct gamePacket *packetOut, int *sock);
 int readIPAddrFromFile(struct sockaddr_in *toAddress, int *sock);
 
 int main(int argc, char *argv[])
@@ -416,14 +416,17 @@ int recvMoveFromServer(int Socket, struct sockaddr_in *toAddress, struct gamePac
   int rc, serverMove;
   size_t packetLength = sizeof(struct gamePacket);
 
-  rc = read(Socket, packetIn, packetLength);
-  if (rc <= 0)
+  do
   {
-    //perror("[RECV]\n Error receiving packet");
-    printf("[CONNECTION]\nLost Connection with Server\n\n");
-    createMulticastSocket(toAddress, board, packetOut);
-    //exit(1);
-  }
+    rc = read(Socket, packetIn, packetLength);
+    if (rc <= 0)
+    {
+      //perror("[RECV]\n Error receiving packet");
+      printf("[CONNECTION]\nLost Connection with Server\n\n");
+      createMulticastSocket(toAddress, board, packetOut, Socket);
+      //exit(1);
+    }
+  } while (rc <= 0);
 
   /***********************************************************************/
   /*            Checks the packet for the correct                        */
@@ -500,7 +503,7 @@ int createSocket(char *ipAddress, int portNumber, struct sockaddr_in *toAddress,
   return 0;
 }
 
-int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMNS], struct gamePacket *packetOut)
+int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMNS], struct gamePacket *packetOut, int *sock)
 {
 
   /*********************************************************/
@@ -583,7 +586,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
   if (rc <= 0)
   {
     perror("SEND TO");
-    readIPAddrFromFile(toAddress, &tcpSocket);
+    readIPAddrFromFile(toAddress, sock);
     //exit(1);
   }
   else
@@ -622,7 +625,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
     }
     else
     {
-      portNum = ntohs(multiPacketIn.portNumber); //From multicast packet recv
+      portNum = multiPacketIn.portNumber; //From multicast packet recv
       toAddress->sin_port = htons(portNum);
       inet_ntop(AF_INET, &(toAddress->sin_addr), ipAddr, INET_ADDRSTRLEN);
 
@@ -643,7 +646,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
   }
   else
   {
-    rc = connect(tcpSocket, (struct sockaddr *)toAddress, addrLen);
+    rc = connect(*sock, (struct sockaddr *)toAddress, addrLen);
     if (rc < 0)
     {
       perror("Connect");
@@ -657,7 +660,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
   /*****************************/
 
   fullPacket.version = VERSION;
-  fullPacket.command = CONTINUEGAME;
+  fullPacket.command = RESUME;
   fullPacket.move = packetOut->command;
   fullPacket.game = packetOut->game;
   fullPacket.sequence = packetOut->sequence;
@@ -675,7 +678,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
   /*    Send new packet  */
   /***********************/
 
-  rc = write(tcpSocket, &fullPacket, sizeof(fullPacket));
+  rc = write(*sock, &fullPacket, sizeof(fullPacket));
   if (rc < 0)
   {
     perror("Write");
