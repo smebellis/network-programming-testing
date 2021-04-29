@@ -65,7 +65,7 @@ struct lostConnection
 struct multicastPacket
 {
   char version;
-  short portNumber;
+  int portNumber;
 };
 
 /***********************************************************/
@@ -398,7 +398,7 @@ int sendMoveToServer(int Socket, struct sockaddr_in *toAddress, struct gamePacke
   if (rc <= 0)
   {
     perror("[SEND]\n Error sending packet");
-    createMulticastSocket(toAddress, board, packetOut, Socket);
+    createMulticastSocket(toAddress, board, packetOut, &Socket);
     //exit(2);
   }
 
@@ -423,7 +423,8 @@ int recvMoveFromServer(int Socket, struct sockaddr_in *toAddress, struct gamePac
     {
       //perror("[RECV]\n Error receiving packet");
       printf("[CONNECTION]\nLost Connection with Server\n\n");
-      createMulticastSocket(toAddress, board, packetOut, Socket);
+      close(Socket);
+      createMulticastSocket(toAddress, board, packetOut, &Socket);
       //exit(1);
     }
   } while (rc <= 0);
@@ -521,7 +522,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
   char ipAddr[INET_ADDRSTRLEN];
   struct gamePacket gamePacket;
   struct multiGamePacket fullPacket;
-
+  char buffer[3];
   /*****************************/
   /*      Set up Timeout       */
   /*****************************/
@@ -550,7 +551,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
   /*            Socket              */
   /**********************************/
 
-  tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
+  *sock = socket(AF_INET, SOCK_STREAM, 0);
 
   if (setsockopt(multicastSocket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)))
   {
@@ -601,7 +602,8 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
 
   do
   {
-    cnt = recvfrom(multicastSocket, &multiPacketIn, sizeof(multiPacketIn), 0, (struct sockaddr *)toAddress, &addrLen);
+
+    cnt = recvfrom(multicastSocket, &buffer, sizeof(multiPacketIn), 0, (struct sockaddr *)toAddress, &addrLen);
     if (cnt <= 0)
     {
       printf("[TIMEOUT] No Multicast Servers Available...resending\n\n");
@@ -625,7 +627,8 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
     }
     else
     {
-      portNum = multiPacketIn.portNumber; //From multicast packet recv
+      memcpy(&portNum, buffer + 1, 2);
+      //portNum = ntohs(multiPacketIn.portNumber); //From multicast packet recv
       toAddress->sin_port = htons(portNum);
       inet_ntop(AF_INET, &(toAddress->sin_addr), ipAddr, INET_ADDRSTRLEN);
 
