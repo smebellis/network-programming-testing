@@ -26,7 +26,7 @@ ASSIGNMENT: Final Project
 #define COLUMNS 3
 #define SOCKETERROR -1
 #define TIMETOWAIT 10
-#define VERSION 5
+#define VERSION 6
 #define NEWGAME 0
 #define CONTINUEGAME 1
 #define GAMEOVER 2
