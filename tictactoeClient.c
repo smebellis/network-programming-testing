@@ -402,7 +402,7 @@ int sendMoveToServer(int *Socket, struct sockaddr_in *toAddress, struct gamePack
     //exit(2);
   }
 
-  printf("[CLIENT]\nVersion: %x\nCommand: %x\nMove: %x\nGame Number: %x\nSequence Number: %x\n\n", packetOut->version, packetOut->command, packetOut->move, packetOut->game, packetOut->sequence);
+  printf("\n[CLIENT]\nVersion: %x\nCommand: %x\nMove: %x\nGame Number: %x\nSequence Number: %x\n\n", packetOut->version, packetOut->command, packetOut->move, packetOut->game, packetOut->sequence);
 
   return 0;
 }
@@ -422,7 +422,7 @@ int recvMoveFromServer(int *Socket, struct sockaddr_in *toAddress, struct gamePa
     if (rc <= 0)
     {
       //perror("[RECV]\n Error receiving packet");
-      printf("[CONNECTION]\nLost Connection with Server\n\n");
+      printf("[CONNECTION]\nLost Connection\nSearching for new connection....\n\n");
       //close(Socket);
       createMulticastSocket(toAddress, board, packetOut, Socket);
       //exit(1);
@@ -513,14 +513,13 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
   /*             if no connection established              */
   /*********************************************************/
 
-  int multicastSocket, tcpSocket, portNum, rc, cnt, connection;
+  int multicastSocket, portNum, rc, cnt, connection;
   struct sockaddr_in multiAddr;
   struct multicastPacket multiPacketIn;
   struct lostConnection resumePacketOut;
   socklen_t addrLen;
   struct ip_mreq mreq;
   char ipAddr[INET_ADDRSTRLEN];
-  struct gamePacket gamePacket;
   struct multiGamePacket fullPacket;
   char buffer[3];
   /*****************************/
@@ -633,7 +632,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
       inet_ntop(AF_INET, &(toAddress->sin_addr), ipAddr, INET_ADDRSTRLEN);
 
       printf("[MULTICAST SERVER]\nReceived a Reply from IP: %s\nPort Number: %d\n\n", ipAddr, htons(toAddress->sin_port));
-      printf("SIN_ADDR: %s", ipAddr);
+
       //exit(1);
     }
   } while (cnt <= 0);
@@ -688,7 +687,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
     exit(1);
   }
 
-  printf("[TCP CLIENT]\nVersion: %x\nCommand: %x\nMove: %x\nGame: %x\nSequence: %x\nBoard: %c %c %c %c %c %c %c %c %c\n\n", fullPacket.version, fullPacket.command, fullPacket.move, fullPacket.game, fullPacket.sequence,
+  printf("[RECONNECTION]\nVersion: %x\nCommand: %x\nMove: %x\nGame: %x\nSequence: %x\nBoard: %c %c %c %c %c %c %c %c %c\n\n", fullPacket.version, fullPacket.command, fullPacket.move, fullPacket.game, fullPacket.sequence,
          fullPacket.board[0][0], fullPacket.board[0][1], fullPacket.board[0][2],
          fullPacket.board[1][0], fullPacket.board[1][1], fullPacket.board[1][2],
          fullPacket.board[2][0], fullPacket.board[2][1], fullPacket.board[2][2]);
@@ -711,7 +710,7 @@ int readIPAddrFromFile(struct sockaddr_in *toAddress, int *sock)
 
   memset(ipaddress, 0, INET_ADDRSTRLEN);
 
-  strcpy(filename, "backup_connections.txt");
+  strcpy(filename, "backup_connections.txt"); //Add list of IP addresses and port numbers to file.  To use for reconnections.
   fileptr = fopen(filename, "r");
 
   if (fileptr == NULL)
