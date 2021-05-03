@@ -20,6 +20,7 @@ ASSIGNMENT: Final Project
 #include <arpa/inet.h>
 #include <time.h>
 #include <memory.h>
+#include <signal.h>
 
 /* Define Terms for Protocol*/
 #define ROWS 3
@@ -142,6 +143,7 @@ int tictactoe(char board[ROWS][COLUMNS], int Socket, int playerNumber, struct so
   struct gamePacket packetIn, packetOut; //Stores game info from client and server
   int currentGame, sequenceNum;
   size_t packetLength = sizeof(struct gamePacket);
+  signal(SIGPIPE, SIG_IGN);
 
   /******************************************************************/
   /*                 Initialize Packout                             */
@@ -615,7 +617,7 @@ int createMulticastSocket(struct sockaddr_in *toAddress, char board[ROWS][COLUMN
         connection = readIPAddrFromFile(toAddress, sock);
         if (connection == -1)
         {
-          printf("[CONNECTION]\n\n**********\nNO AVAILABLE SERVERS\n**********\n");
+          printf("[CONNECTION]\n\n********************\nNO AVAILABLE SERVERS\n********************\n");
           exit(1);
         }
         else
@@ -738,6 +740,7 @@ int readIPAddrFromFile(struct sockaddr_in *toAddress, int *sock)
     }
     else //If rc is < 0 no connection established, then continue loop
     {
+      printf("[FILE]\nUnable to establish connection\nChecking next node\n\n");
       continue;
     }
   }
